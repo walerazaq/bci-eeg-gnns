@@ -1,3 +1,5 @@
+%% This code gets the Brain Connectivity Matrix  of EEG signals and their Power Spectral Densities
+
 clear; close all;
 
 data_path = '/mnt/scratch2/users/asanni/dataNEW/';
