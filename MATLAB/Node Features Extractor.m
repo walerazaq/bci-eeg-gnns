@@ -2,6 +2,8 @@
 
 clear; close all;
 
+addpath(genpath('/mnt/scratch2/users/asanni/MatCodes/'));
+
 freqBand = 'Alpha';
 
 switch freqBand
@@ -22,56 +24,64 @@ end
 mat_files = dir([data_path,'*.mat']);
 numel(mat_files)
 
-for idx = 1:numel(mat_files)
+%% Initialise cell arrays to store results
+efficiency_results = cell(numel(mat_files), 1);
+clusteringcoef_results = cell(numel(mat_files), 1);
+strengths_results = cell(numel(mat_files), 1);
+activity_results = cell(numel(mat_files), 1);
+mobility_results = cell(numel(mat_files), 1);
+complexity_results = cell(numel(mat_files), 1);
+
+%% Start parfor loop
+parfor idx = 1:numel(mat_files)
     file      = mat_files(idx).name(1:end-4);
     subject   = mat_files(idx).name(1:6);
     disp(['Analysing ',subject])
 
     %% Reading data
-    load([data_path,mat_files(idx).name]);
+    data_cur = load([data_path,mat_files(idx).name]);
+
+    % 1. Get Efficiency
+    efficiency_results{idx} = efficiency_wei(data_cur.freqMatrix,2);
+
+    % 2. Get Clustering Coefficients
+    clusteringcoef_results{idx} = clustering_coef_wu(data_cur.freqMatrix);
+
+    % 3. Get Strengths
+    strengths_results{idx} = strengths_und(data_cur.freqMatrix);
+
+    % 4. Get Hjorth Parameters
+    [ACTIVITY, MOBILITY, COMPLEXITY] = hjorth(data_cur.freqMatrix,0);
+
+    % Store Hjorth Parameters
+    activity_results{idx} = ACTIVITY;
+    mobility_results{idx} = MOBILITY;
+    complexity_results{idx} = COMPLEXITY;
+end
+
+%% Save results from outside the parfor loop
+for idx = 1:numel(mat_files)
+    file = mat_files(idx).name(1:end-4);
     
-    %% Uncomment node feature to get and run
+    % Save Efficiency
+    efficiency = efficiency_results{idx};
+    save([data_path, 'Efficiency/', file, '.mat'], 'efficiency', '-v7.3', '-nocompression');
 
-%     %% 1.Get Efficiency
-%     efficiency = efficiency_wei(BCM,2);
-% 
-%     %% Save Efficiency
-%     save_path = [data_path, 'Efficiency/'];
-%     save([save_path,file,'.mat'],'efficiency','-v7.3','-nocompression')
-% 
-%     %% 2.Get Clustering Coefficients
-%     clusteringcoef = clustering_coef_wu(BCM);
-% 
-%     %% Save Clustering Coefficients
-%     save_path = [data_path, 'ClusteringCoef/'];
-%     save([save_path,file,'.mat'],'clusteringcoef','-v7.3','-nocompression')
-% 
-%     %% 3.Get Strengths
-%     strengths = strengths_und(BCM);
-% 
-%     %% Save Strengths
-%     save_path = [data_path, 'Strength/'];
-%     save([save_path,file,'.mat'],'strengths','-v7.3','-nocompression')
-% 
-%     %% 4.Get Betweenness
-%     W = weight_conversion(BCM, 'lengths');
-%     betweenness = betweenness_wei(W);
-% 
-%     %% Save Betweenness
-%     save_path = [data_path, 'Betweenness/'];
-%     save([save_path,file,'.mat'],'betweenness','-v7.3','-nocompression')
-% 
-%     %% 5.Get Hjorth Parameters
-%     [ACTIVITY, MOBILITY, COMPLEXITY] = hjorth(BCM,0);
-% 
-%     %% Save Parameters
-%     save_path = [data_path, 'Activity/'];
-%     save([save_path,file,'.mat'],'ACTIVITY','-v7.3','-nocompression')
-% 
-%     save_path = [data_path, 'Mobility/'];
-%     save([save_path,file,'.mat'],'MOBILITY','-v7.3','-nocompression')
-% 
-%     save_path = [data_path, 'Complexity/'];
-%     save([save_path,file,'.mat'],'COMPLEXITY','-v7.3','-nocompression')
+    % Save Clustering Coefficients
+    clusteringcoef = clusteringcoef_results{idx};
+    save([data_path, 'ClusteringCoef/', file, '.mat'], 'clusteringcoef', '-v7.3', '-nocompression');
 
+    % Save Strengths
+    strengths = strengths_results{idx};
+    save([data_path, 'Strength/', file, '.mat'], 'strengths', '-v7.3', '-nocompression');
+
+    % Save Hjorth Parameters
+    ACTIVITY = activity_results{idx};
+    save([data_path, 'Activity/', file, '.mat'], 'ACTIVITY', '-v7.3', '-nocompression');
+    
+    MOBILITY = mobility_results{idx};
+    save([data_path, 'Mobility/', file, '.mat'], 'MOBILITY', '-v7.3', '-nocompression');
+    
+    COMPLEXITY = complexity_results{idx};
+    save([data_path, 'Complexity/', file, '.mat'], 'COMPLEXITY', '-v7.3', '-nocompression');
 end
