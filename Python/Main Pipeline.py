@@ -1,6 +1,4 @@
-# In[1]:
-
-
+# Import Libraries
 import os
 import torch
 import numpy as np
@@ -34,16 +32,10 @@ from ray import train, tune
 from ray.train import Checkpoint
 from ray.tune.schedulers import ASHAScheduler
 
-
-# In[2]:
-
-
+# Check for CUDA and assign device
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-
-# In[3]:
-
-
+# Load Data
 class GraphDataset(torch.utils.data.Dataset):
     def __init__(self, root_dir, group, seed=None):
         self.root_dir = root_dir
@@ -110,18 +102,10 @@ class GraphDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         return self.data[idx]
 
-
-# In[4]:
-
-
+# Load and store dataset
 dataset = GraphDataset(r'/mnt/scratch2/users/asanni/', 'Alpha', seed=7)
 
-
-# In[5]:
-
-
-# Next we split the dataset into training, test, and validation sets. We then initialise the data loaders
-
+# Next we split the dataset into training, test, and validation sets.
 total_size = len(dataset)
 
 # Calculate the sizes of each split as percentages
@@ -133,23 +117,14 @@ test_size = total_size - train_size - val_size
 train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
 
 
-# In[6]:
-
-
 # Define testset data loader
-
 test_loader = DataLoader(
     test_dataset,
     batch_size=4,
     shuffle=True
 )
 
-
-# In[7]:
-
-
-# Defining readout function
-
+# Defining Graph Pooling readout function
 def graph_readout(x, method, batch):
     if method == 'mean':
         return global_mean_pool(x,batch)
@@ -165,12 +140,7 @@ def graph_readout(x, method, batch):
     else:
         raise ValueError('Undefined readout opertaion')
 
-
-# In[8]:
-
-
 # Define GNN models architectures
-
 class Abstract_GNN(torch.nn.Module):
     """
     An Abstract class for all GNN models
@@ -317,24 +287,14 @@ class ChebEdge(Abstract_GNN):
         x = self.fc(x)
         return x
 
-
-# In[9]:
-
-
 # Training Models
-
 #GCN_ = GCN(7, 4, config["f1"], config["f2"], readout='meanmax')
 #GIN_ = GIN(7, 4, config["f1"], config["f2"], readout='meanmax')
 #GAT_ = GAT(7, 4, config["f1"], config["f2"], config["num_heads"], readout='meanmax', concat=True)
 #ChebC_ = ChebC(7, 4, config["f1"], config["f2"], config["chebFilterSize"], readout='meanmax')
 #ChebEdge_ = ChebEdge(7, 4, config["f1"], config["f2"], config["chebFilterSize"], readout='meanmax')
 
-
-# In[27]:
-
-
-# Training and Tuning Pipeline
-
+# Training and RayTune Pipeline
 def trainEEG(config, train_dataset, val_dataset, device):
     model = GCN(7, 4, config["f1"], config["f2"], readout='meanmax')
     model = model.to(device)
@@ -431,24 +391,14 @@ def trainEEG(config, train_dataset, val_dataset, device):
         
     print("Finished Training")
 
-
-# In[20]:
-
-
 # Testing Models
-
 #GCN_ = GCN(7, 4, best_result.config["f1"], best_result.config["f2"], readout='meanmax')
 #GIN_ = GIN(7, 4, best_result.config["f1"], best_result.config["f2"], readout='meanmax')
 #GAT_ = GAT(7, 4, best_result.config["f1"], best_result.config["f2"], best_result.config["num_heads"], readout='meanmax', concat=True)
 #ChebC_ = ChebC(7, 4, best_result.config["f1"], best_result.config["f2"], best_result.config["chebFilterSize"], readout='meanmax')
 #ChebEdge_ = ChebEdge(7, 4, best_result.config["f1"], best_result.config["f2"], best_result.config["chebFilterSize"], readout='meanmax')
 
-
-# In[28]:
-
-
 # Test Function
-
 def test_model(best_result, test_loader, device):
          
     best_trained_model = GCN(7, 4, best_result.config["f1"], best_result.config["f2"], readout='meanmax')
@@ -479,12 +429,7 @@ def test_model(best_result, test_loader, device):
 
     return accuracy
 
-
-# In[29]:
-
-
 # RayTune
-
 def mainTrain(num_samples=10, max_num_epochs=50, gpus_per_trial=1):
     config = {
         "f1": tune.sample_from(lambda _: 2 ** np.random.randint(2, 9)),
@@ -528,23 +473,11 @@ def mainTrain(num_samples=10, max_num_epochs=50, gpus_per_trial=1):
     
     return best_result
 
-
-# In[14]:
-
-
 # Initialise Ray 
 ray.init(num_cpus=4)
 
-
-# In[30]:
-
-
 # Run Training Process
 best_result = mainTrain(num_samples=20, max_num_epochs=50, gpus_per_trial=2)
-
-
-# In[14]:
-
 
 # Shutdown Ray
 ray.shutdown()
