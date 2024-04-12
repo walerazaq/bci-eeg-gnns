@@ -26,27 +26,23 @@ from torch_geometric.nn.inits import glorot, zeros
 from collections import OrderedDict
 from torch_geometric.utils import to_networkx
 from torch_geometric.loader import DataLoader
-from torch.utils.data import ConcatDataset, random_split
-import ray
-from ray import train, tune
-from ray.train import Checkpoint
-from ray.tune.schedulers import ASHAScheduler
 
 # Check for CUDA and assign device
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 # Load Data
 class GraphDataset(torch.utils.data.Dataset):
-    def __init__(self, root_dir, group, seed=None):
+    def __init__(self, root_dir, group, session=1):
         self.root_dir = root_dir
         self.group_dir = os.path.join(root_dir, group)
-        self.seed = seed
+        self.session = session
         self.data = self.load_data()
 
     def load_data(self):
         data = []
+        session_str = f"ses-0{self.session}"
         for filename in os.listdir(self.group_dir):
-            if filename.endswith('.mat'):
+            if filename.endswith('.mat') and session_str in filename:
                 adjacency_matrix_file = os.path.join(self.group_dir, filename)
                 class_label = (int(filename.split('_')[-1].split('.')[0][-1])) - 1
                 node_features = self.load_node_features(filename)
@@ -58,16 +54,11 @@ class GraphDataset(torch.utils.data.Dataset):
                 data.append(Data(x=x,
                                  adj = adj,
                                  y=torch.tensor([class_label], dtype=torch.long)))
-                
-        if self.seed is not None:
-            random.seed(self.seed) 
-            random.shuffle(data)
         return data
 
     def load_adjacency_matrix(self, filepath):
         mat_contents = read_mat(filepath)
         adjacency_matrix = mat_contents['BCM']
-        adjacency_matrix = np.abs(adjacency_matrix)
         adj_sparse = csr_matrix(adjacency_matrix)
 
         return adj_sparse
@@ -94,6 +85,8 @@ class GraphDataset(torch.utils.data.Dataset):
                         node_features['Efficiency'] = np.abs(mat_contents['efficiency'])
                     elif folder == 'PSD':
                         node_features['PSD'] = mat_contents['PSD']
+                    elif folder == 'Betweenness':
+                        node_features['Betweenness'] = mat_contents['betweenness']
         return node_features
 
     def __len__(self):
@@ -103,26 +96,15 @@ class GraphDataset(torch.utils.data.Dataset):
         return self.data[idx]
 
 # Load and store dataset
-dataset = GraphDataset(r'/mnt/scratch2/users/asanni/', 'Alpha', seed=7)
+foldDataset = GraphDataset(r'/mnt/scratch2/users/asanni/EEG/', 'AlphaTrials', session=1)
+testDataset = GraphDataset(r'/mnt/scratch2/users/asanni/EEG/', 'AlphaTrials', session=2)
 
-# Next we split the dataset into training, test, and validation sets.
-total_size = len(dataset)
-
-# Calculate the sizes of each split as percentages
-train_size = int(0.6 * total_size)
-val_size = int(0.2 * total_size)
-test_size = total_size - train_size - val_size
-
-# Random split the dataset based on percentages
-train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
-
-
-# Define testset data loader
+# Test set data loader
 test_loader = DataLoader(
-    test_dataset,
-    batch_size=4,
+    testDataset,
+    batch_size=32,
     shuffle=True
-)
+    )
 
 # Defining Graph Pooling readout function
 def graph_readout(x, method, batch):
@@ -287,130 +269,130 @@ class ChebEdge(Abstract_GNN):
         x = self.fc(x)
         return x
 
-# Training Models
-#GCN_ = GCN(7, 4, config["f1"], config["f2"], readout='meanmax')
-#GIN_ = GIN(7, 4, config["f1"], config["f2"], readout='meanmax')
-#GAT_ = GAT(7, 4, config["f1"], config["f2"], config["num_heads"], readout='meanmax', concat=True)
-#ChebC_ = ChebC(7, 4, config["f1"], config["f2"], config["chebFilterSize"], readout='meanmax')
-#ChebEdge_ = ChebEdge(7, 4, config["f1"], config["f2"], config["chebFilterSize"], readout='meanmax')
+# LOSO Training and Validation Functions
+def train(model, dataset, device):
 
-# Training and RayTune Pipeline
-def trainEEG(config, train_dataset, val_dataset, device):
-    model = GCN(7, 4, config["f1"], config["f2"], readout='meanmax')
     model = model.to(device)
 
-    loss_function = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr = config["lr"], weight_decay = config["wd"])
-    
-    if train.get_checkpoint():
-        loaded_checkpoint = train.get_checkpoint()
-        with loaded_checkpoint.as_directory() as loaded_checkpoint_dir:
-            model_state, optimizer_state = torch.load(
-                os.path.join(loaded_checkpoint_dir, "checkpoint.pt")
-            )
-            model.load_state_dict(model_state)
-            optimizer.load_state_dict(optimizer_state)
-            
-    # Dataloaders    
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=int(config["batch_size"]),
-        shuffle=True,
-        num_workers=1
-    )
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=int(config["batch_size"]),
-        shuffle=True,
-        num_workers=1
-    )
-    
-    epochs = 50
+    loss_function = LabelSmoothingCrossEntropy()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, weight_decay=1e-2)
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=500, eta_min=1e-5)
 
-    for epoch in range(epochs):  # loop over the dataset multiple times
-        epoch_train_loss = 0.0
-        epoch_steps = 0
-        
-        for i, data in enumerate(tqdm(train_loader)):
+    best_models = []
+    best_metrics = []
+    fold = 0
+
+    for i in range(0, len(dataset), len(dataset)//10):
+        fold += 1
+        print(f"Fold {fold}/10")
+
+        val_start = i
+        val_end = i + len(dataset)//10
+        train_dataset = dataset[:val_start] + dataset[val_end:]
+        val_dataset = dataset[val_start:val_end]
+
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=4,
+            shuffle=True
+        )
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=4,
+            shuffle=True
+        )
+
+        best_metric = -1
+        best_metric_epoch = -1
+        best_val_loss = 1000
+        best_model = None
+        epochs = 1000
+
+        print('-' * 30)
+        print('Training ... ')
+        early_stop = 30
+        es_counter = 0
+
+        for epoch in range(epochs):
+
+            print("-" * 10)
+            print(f"epoch {epoch + 1}/{epochs}")
+            model.train()
+            epoch_train_loss = 0
+
+            for i, data in enumerate(tqdm(train_loader)):
+                batch = data.batch.to(device)
+                x = data.x.to(device)
+                y = data.y.to(device)
+                u = data.adj.to(device)
+                optimizer.zero_grad()
+
+                out = model(x, u, batch)
+
+                step_loss = loss_function(out, y)
+                step_loss.backward(retain_graph=True)
+                optimizer.step()
+                epoch_train_loss += step_loss.item()
+
+            epoch_train_loss = epoch_train_loss / (i + 1)
+            lr_scheduler.step()
+            val_loss, val_acc = validate_model(model, val_loader, device)
+            print(f"epoch {epoch + 1} train loss: {epoch_train_loss:.4f}")
+
+            if val_loss < best_val_loss:
+                best_metric = val_acc
+                best_val_loss = val_loss
+                best_metric_epoch = epoch + 1
+                best_model = deepcopy(model)
+                print("saved new best metric model")
+                es_counter = 0
+            else:
+                es_counter += 1
+
+            if es_counter > early_stop:
+                print('No loss improvement.')
+                break
+
+            print(
+                "current epoch: {} current val loss {:.4f} current accuracy: {:.4f}  best accuracy: {:.4f} at loss {:.4f} at epoch {}".format(
+                    epoch + 1, val_loss, val_acc, best_metric, best_val_loss, best_metric_epoch))
+
+        print(f"train completed, best_val_loss: {best_val_loss:.4f} at epoch: {best_metric_epoch}")
+
+        best_models.append(best_model)
+        best_metrics.append((best_metric, best_val_loss))
+
+    return best_models, best_metrics
+
+def validate_model(model, val_loader, device):
+    model.eval()
+    val_loss = 0
+    loss_func = nn.CrossEntropyLoss()
+
+    labels = []
+    preds = []
+    for i, data in enumerate(val_loader):
             batch = data.batch.to(device)
             x = data.x.to(device)
-            y = data.y.to(device)
+            label = data.y.to(device)
             u = data.adj.to(device)
-            optimizer.zero_grad()
 
             out = model(x,u,batch)
 
-            step_loss = loss_function(out, y)
-            step_loss.backward(retain_graph=True)
-            optimizer.step()
-            epoch_train_loss += step_loss.item()
-            epoch_steps += 1
-            if i % 2000 == 1999:  # print every 2000 mini-batches
-                print(
-                    "[%d, %5d] loss: %.3f"
-                    % (epoch + 1, i + 1, epoch_train_loss / epoch_steps)
-                )
-                epoch_train_loss = 0.0
+            step_loss = loss_func(out, label)
+            val_loss += step_loss.detach().item()
+            preds.append(out.argmax(dim=1).detach().cpu().numpy())
+            labels.append(label.cpu().numpy())
+    preds = np.concatenate(preds).ravel()
+    labels =  np.concatenate(labels).ravel()
+    acc = balanced_accuracy_score(labels, preds)
+    loss = val_loss/(i+1)
 
-        # Validation loss
-        val_loss = 0.0
-        val_steps = 0
-        loss_func = nn.CrossEntropyLoss()
-        
-        labels = []
-        preds = []
-        for i, data in enumerate(val_loader):
-            with torch.no_grad():
-                batch = data.batch.to(device)
-                x = data.x.to(device)
-                label = data.y.to(device)
-                u = data.adj.to(device)
-
-                out = model(x,u,batch)
-                
-                step_loss = loss_func(out, label)
-                val_loss += step_loss.detach().item()
-                val_steps += 1
-                preds.append(out.argmax(dim=1).detach().cpu().numpy())
-                labels.append(label.cpu().numpy())
-                
-        preds = np.concatenate(preds).ravel()
-        labels =  np.concatenate(labels).ravel()
-        acc = balanced_accuracy_score(labels, preds)
-        
-        with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
-            path = os.path.join(temp_checkpoint_dir, "checkpoint.pt")
-            torch.save(
-                (model.state_dict(), optimizer.state_dict()), path
-            )
-            checkpoint = Checkpoint.from_directory(temp_checkpoint_dir)
-            train.report(
-                {"loss": (val_loss / val_steps), "accuracy": acc},
-                checkpoint=checkpoint,
-            )
-        
-    print("Finished Training")
-
-# Testing Models
-#GCN_ = GCN(7, 4, best_result.config["f1"], best_result.config["f2"], readout='meanmax')
-#GIN_ = GIN(7, 4, best_result.config["f1"], best_result.config["f2"], readout='meanmax')
-#GAT_ = GAT(7, 4, best_result.config["f1"], best_result.config["f2"], best_result.config["num_heads"], readout='meanmax', concat=True)
-#ChebC_ = ChebC(7, 4, best_result.config["f1"], best_result.config["f2"], best_result.config["chebFilterSize"], readout='meanmax')
-#ChebEdge_ = ChebEdge(7, 4, best_result.config["f1"], best_result.config["f2"], best_result.config["chebFilterSize"], readout='meanmax')
-
-# Test Function
-def test_model(best_result, test_loader, device):
-         
-    best_trained_model = GCN(7, 4, best_result.config["f1"], best_result.config["f2"], readout='meanmax')
-
-    best_trained_model.to(device)
-
-    checkpoint_path = os.path.join(best_result.checkpoint.to_directory(), "checkpoint.pt")
-
-    model_state, optimizer_state = torch.load(checkpoint_path)
-    best_trained_model.load_state_dict(model_state)
+    return loss, acc
     
-    best_trained_model.eval()
+# Test function
+def test_model(model, test_loader, device):
+    model.eval()
     labels = []
     preds = []
     for i, data in enumerate(test_loader):
@@ -419,7 +401,7 @@ def test_model(best_result, test_loader, device):
             label = data.y.to(device)
             u = data.adj.to(device)
 
-            out = best_trained_model(x,u,batch)
+            out = model(x,u,batch)
             preds.append(out.argmax(dim=1).detach().cpu().numpy())
             labels.append(label.cpu().numpy())
     preds = np.concatenate(preds).ravel()
@@ -429,56 +411,7 @@ def test_model(best_result, test_loader, device):
 
     return accuracy
 
-# RayTune
-def mainTrain(num_samples=10, max_num_epochs=50, gpus_per_trial=1):
-    config = {
-        "f1": tune.sample_from(lambda _: 2 ** np.random.randint(2, 9)),
-        "f2": tune.sample_from(lambda _: 2 ** np.random.randint(2, 9)),
-        "lr": tune.loguniform(1e-5, 1e-1),
-        "wd": tune.loguniform(1e-5, 1e-1),
-        #"chebFilterSize": tune.choice([1, 2, 4, 8, 16]),
-        #"num_heads": tune.choice([1, 2, 4, 8, 16]),
-        "batch_size": tune.choice([2, 4, 8, 16]),
-    }
-    scheduler = ASHAScheduler(
-        max_t=max_num_epochs,
-        grace_period=3,
-        reduction_factor=2,
-    )
-    tuner = tune.Tuner(
-        tune.with_resources(
-            tune.with_parameters(trainEEG, train_dataset=train_dataset, val_dataset=val_dataset, device=device),
-            resources={"cpu": 2, "gpu": gpus_per_trial}
-        ),
-        tune_config=tune.TuneConfig(
-            metric="loss",
-            mode="min",
-            scheduler=scheduler,
-            num_samples=num_samples,
-        ),
-        param_space=config,
-    )
-    results = tuner.fit()
-
-    best_result = results.get_best_result("loss", "min")
-
-    print("Best trial config: {}".format(best_result.config))
-    print("Best trial final validation loss: {}".format(
-        best_result.metrics["loss"]))
-    print("Best trial final validation accuracy: {}".format(
-        best_result.metrics["accuracy"]))
-
-    test_acc = test_model(best_result, test_loader, device)
-    print("Best trial test set accuracy: {}".format(test_acc))
-    
-    return best_result
-
-# Initialise Ray 
-ray.init(num_cpus=4)
-
-# Run Training Process
-best_result = mainTrain(num_samples=20, max_num_epochs=50, gpus_per_trial=2)
-
-# Shutdown Ray
-ray.shutdown()
+# Initialise and train GCN Model
+GCN_ = GCN(8, 2, 4, readout='sum')
+models, metrics = train(GCN_, foldDataset, device)
 
