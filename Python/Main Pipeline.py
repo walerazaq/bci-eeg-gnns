@@ -32,28 +32,36 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 
 # Load Data
 class GraphDataset(torch.utils.data.Dataset):
-    def __init__(self, root_dir, group, session=1):
+    def __init__(self, root_dir, group):
         self.root_dir = root_dir
         self.group_dir = os.path.join(root_dir, group)
-        self.session = session
         self.data = self.load_data()
 
     def load_data(self):
+        filenames = os.listdir(self.group_dir)
+        mat_files = [filename for filename in filenames if filename.endswith('.mat')]
+        
+        # Sort files by subject, session, and trial number
+        file_info = [(int(filename.split('_')[0].split('-')[1]),
+                      int(filename.split('_')[1].split('-')[1]),
+                      int(filename.split('_')[3][3:]),
+                      filename)
+                     for filename in mat_files]
+        sorted_files = sorted(file_info)
+
         data = []
-        session_str = f"ses-0{self.session}"
-        for filename in os.listdir(self.group_dir):
-            if filename.endswith('.mat') and session_str in filename:
-                adjacency_matrix_file = os.path.join(self.group_dir, filename)
-                class_label = (int(filename.split('_')[-1].split('.')[0][-1])) - 1
-                node_features = self.load_node_features(filename)
-                adjacency_matrix = self.load_adjacency_matrix(adjacency_matrix_file)
-                adj = SparseTensor.from_scipy(adjacency_matrix)
-                num_nodes = adjacency_matrix.shape[0]
-                x = np.vstack(list(node_features.values())).T
-                x = torch.tensor(x, dtype=torch.float32)
-                data.append(Data(x=x,
-                                 adj = adj,
-                                 y=torch.tensor([class_label], dtype=torch.long)))
+        for _, _, _, filename in sorted_files:
+            adjacency_matrix_file = os.path.join(self.group_dir, filename)
+            class_label = (int(filename.split('_')[-1].split('.')[0][-1])) - 1
+            node_features = self.load_node_features(filename)
+            adjacency_matrix = self.load_adjacency_matrix(adjacency_matrix_file)
+            adj = SparseTensor.from_scipy(adjacency_matrix)
+            num_nodes = adjacency_matrix.shape[0]
+            x = np.vstack(list(node_features.values())).T
+            x = torch.tensor(x, dtype=torch.float32)
+            data.append(Data(x=x,
+                             adj = adj,
+                             y=torch.tensor([class_label], dtype=torch.long)))
         return data
 
     def load_adjacency_matrix(self, filepath):
@@ -96,15 +104,7 @@ class GraphDataset(torch.utils.data.Dataset):
         return self.data[idx]
 
 # Load and store dataset
-foldDataset = GraphDataset(r'/mnt/scratch2/users/asanni/EEG/', 'AlphaTrials', session=1)
-testDataset = GraphDataset(r'/mnt/scratch2/users/asanni/EEG/', 'AlphaTrials', session=2)
-
-# Test set data loader
-test_loader = DataLoader(
-    testDataset,
-    batch_size=32,
-    shuffle=True
-    )
+dataset = GraphDataset(r'/mnt/scratch2/users/asanni/EEG/', 'AlphaTrials')
 
 # Defining Graph Pooling readout function
 def graph_readout(x, method, batch):
@@ -269,9 +269,8 @@ class ChebEdge(Abstract_GNN):
         x = self.fc(x)
         return x
 
-# LOSO Training and Validation Functions
+# Leave One Subject Out (LOSO) Training and Validation Function
 def train(model, dataset, device):
-
     model = model.to(device)
 
     loss_function = LabelSmoothingCrossEntropy()
@@ -283,6 +282,8 @@ def train(model, dataset, device):
     fold = 0
 
     for i in range(0, len(dataset), len(dataset)//10):
+        model._reset_parameters()
+        
         fold += 1
         print(f"Fold {fold}/10")
 
@@ -389,29 +390,44 @@ def validate_model(model, val_loader, device):
     loss = val_loss/(i+1)
 
     return loss, acc
+
+# Metrics
+def Metrics(x):
+    count = 1
+    accuracy = []
+    for i, j in x:
+        print(f"Fold {count} -- Accuracy: {i}, Loss: {j}")
+        accuracy.append(i)
+        count += 1
+        
+    average = np.mean(accuracy)
+    print(f"Average Accuracy: {average}")
     
-# Test function
-def test_model(model, test_loader, device):
-    model.eval()
-    labels = []
-    preds = []
-    for i, data in enumerate(test_loader):
-            batch = data.batch.to(device)
-            x = data.x.to(device)
-            label = data.y.to(device)
-            u = data.adj.to(device)
-
-            out = model(x,u,batch)
-            preds.append(out.argmax(dim=1).detach().cpu().numpy())
-            labels.append(label.cpu().numpy())
-    preds = np.concatenate(preds).ravel()
-    labels =  np.concatenate(labels).ravel()
-
-    accuracy = balanced_accuracy_score(labels, preds)
-
-    return accuracy
-
 # Initialise and train GCN Model
-GCN_ = GCN(8, 2, 4, readout='sum')
-models, metrics = train(GCN_, foldDataset, device)
+GCN_ = GCN(8, 2, 4, readout='meanmax')
+gcnModels, gcnMetrics = train(GCN_, dataset, device)
+Metrics(gcnMetrics)
 
+# Initialise and train GIN Model
+GIN_ = GIN(8, 2, 4, readout='mean')
+ginModels, ginMetrics = train(GIN_, dataset, device)
+Metrics(ginMetrics)
+
+# Initialise and train GAT Model
+GAT_ = GAT(8, 2, 4, readout='meanmax', concat=True, num_heads=4)
+gatModels, gatMetrics = train(GAT_, dataset, device)
+Metrics(gatMetrics)
+
+# Initialise and train Chebnet Model
+chebFilterSize = 1
+
+ChebC_ = ChebC(8, 2, 4, chebFilterSize, readout='meanmax')
+chebModels, chebMetrics = train(ChebC_, dataset, device)
+Metrics(chebMetrics)
+
+# Initialise and train Chebnet + EdgeConv Model
+chebFilterSize = 1
+
+ChebEdge_ = ChebEdge(8, 2, 4, chebFilterSize, readout='meanmax')
+chbedgModels, chbedgMetrics = train(ChebEdge_, dataset, device)
+Metrics(chbedgMetrics)
