@@ -62,7 +62,7 @@ for idx = 1:numel(mat_files)
         %% Brain Connectivity matrix
         cfg            = [];
         cfg.method  = 'coh';
-        cfg.complex = 'imag';
+        cfg.complex = 'absimag';
         bcm_         = ft_connectivityanalysis(cfg, freq);
         BCM = mean(bcm_.cohspctrm,3); 
 
