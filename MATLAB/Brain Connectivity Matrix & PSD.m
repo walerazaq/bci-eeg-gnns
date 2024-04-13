@@ -56,7 +56,7 @@ for idx = 1:numel(mat_files)
         cfg.keeptrials = 'yes';
         cfg.foilim     = freqRange;
         cfg.trials  = dataNEW.trialinfo == unique_labels(i);
-        cfg.toi          = 1:0.05:3.5;  
+        cfg.toi          = 0.5:0.05:3;  
         freq        = ft_freqanalysis(cfg, dataNEW);
 
         %% Brain Connectivity matrix
