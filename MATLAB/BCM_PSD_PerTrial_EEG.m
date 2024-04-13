@@ -10,28 +10,28 @@ freqBand = 'Gamma';
 switch freqBand
     case 'Alpha'
         freqRange = [8,13];
-        save_path_BCM = 'C:\Users\USER\Desktop\EEGData\AlphaTrials\';
-        save_path_PSD = 'C:\Users\USER\Desktop\EEGData\AlphaTrials\PSD\';
+        save_path_BCM = '/mnt/scratch2/users/asanni/EEG/Alpha/';
+        save_path_PSD = '/mnt/scratch2/users/asanni/EEG/Alpha/PSD/';
     case 'Beta'
         freqRange = [13,30];
-        save_path_BCM = 'C:\Users\USER\Desktop\EEGData\BetaTrials\';
-        save_path_PSD = 'C:\Users\USER\Desktop\EEGData\BetaTrials\PSD\';
+        save_path_BCM = '/mnt/scratch2/users/asanni/EEG/Beta/';
+        save_path_PSD = '/mnt/scratch2/users/asanni/EEG/Beta/PSD/';
     case 'Delta'
         freqRange = [0.5,4];
-        save_path_BCM = 'C:\Users\USER\Desktop\EEGData\DeltaTrials\';
-        save_path_PSD = 'C:\Users\USER\Desktop\EEGData\DeltaTrials\PSD\';
+        save_path_BCM = '/mnt/scratch2/users/asanni/EEG/Delta/';
+        save_path_PSD = '/mnt/scratch2/users/asanni/EEG/Delta/PSD/';
     case 'Theta'
         freqRange = [4,7];
-        save_path_BCM = 'C:\Users\USER\Desktop\EEGData\ThetaTrials\';
-        save_path_PSD = 'C:\Users\USER\Desktop\EEGData\ThetaTrials\PSD\';
+        save_path_BCM = '/mnt/scratch2/users/asanni/EEG/Theta/';
+        save_path_PSD = '/mnt/scratch2/users/asanni/EEG/Theta/PSD/';
     case 'Gamma'
         freqRange = [30,45];
-        save_path_BCM = 'C:\Users\USER\Desktop\EEGData\GammaTrials\';
-        save_path_PSD = 'C:\Users\USER\Desktop\EEGData\GammaTrials\PSD\';
+        save_path_BCM = '/mnt/scratch2/users/asanni/EEG/Gamma/';
+        save_path_PSD = '/mnt/scratch2/users/asanni/EEG/Gamma/PSD/';
     case 'overAll'
         freqRange = [0.5,45];
-        save_path_BCM = 'C:\Users\USER\Desktop\EEGData\Overall\';
-        save_path_PSD = 'C:\Users\USER\Desktop\EEGData\Overall\PSD\';
+        save_path_BCM = '/mnt/scratch2/users/asanni/EEG/Overall/';
+        save_path_PSD = '/mnt/scratch2/users/asanni/EEG/Overall/PSD/';
 end
 
 for idx = 1:numel(mat_files)
@@ -54,13 +54,13 @@ for idx = 1:numel(mat_files)
         cfg.keeptrials = 'yes';
         cfg.foilim     = freqRange;
         cfg.trials  = i;
-        cfg.toi          = 1:0.05:3.5;  
+        cfg.toi          = 0.5:0.05:3;  
         freq        = ft_freqanalysis(cfg, dataNEW);
     
         %% Brain Connectivity matrix
         cfg            = [];
         cfg.method  = 'coh';
-        cfg.complex = 'imag';
+        cfg.complex = 'absimag';
         bcm_         = ft_connectivityanalysis(cfg, freq);
         BCM = mean(bcm_.cohspctrm,3); 
     
@@ -76,7 +76,7 @@ for idx = 1:numel(mat_files)
         cfg.keeptrials = 'no';
         cfg.foilim     = freqRange;
         cfg.trials  = i;
-        cfg.toi          = 1:0.05:3.5; 
+        cfg.toi          = 0.5:0.05:3; 
         psd_        = ft_freqanalysis(cfg, dataNEW);
         PSD = mean(psd_.powspctrm, 2);
             
