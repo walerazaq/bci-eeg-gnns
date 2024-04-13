@@ -78,7 +78,7 @@ for idx = 1:numel(mat_files)
         cfg.keeptrials = 'no';
         cfg.foilim     = freqRange;
         cfg.trials  = dataNEW.trialinfo == unique_labels(i);
-        cfg.toi          = 1:0.05:3.5; 
+        cfg.toi          = 0.5:0.05:3; 
         psd_        = ft_freqanalysis(cfg, dataNEW);
         PSD = mean(psd_.powspctrm, 2);
             
