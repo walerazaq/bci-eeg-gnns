@@ -12,28 +12,28 @@ freqBand = 'Alpha';
 switch freqBand
     case 'Alpha'
         freqRange = [8,13];
-        save_path_BCM = '/mnt/scratch2/users/asanni/Alpha/';
-        save_path_PSD = '/mnt/scratch2/users/asanni/Alpha/PSD/';
+        save_path_BCM = '/mnt/scratch2/users/asanni/EEG/Alpha/';
+        save_path_PSD = '/mnt/scratch2/users/asanni/EEG/Alpha/PSD/';
     case 'Beta'
         freqRange = [13,30];
-        save_path_BCM = '/mnt/scratch2/users/asanni/Beta/';
-        save_path_PSD = '/mnt/scratch2/users/asanni/Beta/PSD/';
+        save_path_BCM = '/mnt/scratch2/users/asanni/EEG/Beta/';
+        save_path_PSD = '/mnt/scratch2/users/asanni/EEG/Beta/PSD/';
     case 'Delta'
         freqRange = [0.5,4];
-        save_path_BCM = '/mnt/scratch2/users/asanni/Delta/';
-        save_path_PSD = '/mnt/scratch2/users/asanni/Delta/PSD/';
+        save_path_BCM = '/mnt/scratch2/users/asanni/EEG/Delta/';
+        save_path_PSD = '/mnt/scratch2/users/asanni/EEG/Delta/PSD/';
     case 'Theta'
         freqRange = [4,7];
-        save_path_BCM = '/mnt/scratch2/users/asanni/Theta/';
-        save_path_PSD = '/mnt/scratch2/users/asanni/Theta/PSD/';
+        save_path_BCM = '/mnt/scratch2/users/asanni/EEG/Theta/';
+        save_path_PSD = '/mnt/scratch2/users/asanni/EEG/Theta/PSD/';
     case 'Gamma'
         freqRange = [30,45];
-        save_path_BCM = '/mnt/scratch2/users/asanni/Gamma/';
-        save_path_PSD = '/mnt/scratch2/users/asanni/Gamma/PSD/';
+        save_path_BCM = '/mnt/scratch2/users/asanni/EEG/Gamma/';
+        save_path_PSD = '/mnt/scratch2/users/asanni/EEG/Gamma/PSD/';
     case 'overAll'
         freqRange = [0.5,45];
-        save_path_BCM = '/mnt/scratch2/users/asanni/Overall/';
-        save_path_PSD = '/mnt/scratch2/users/asanni/Overall/PSD/';
+        save_path_BCM = '/mnt/scratch2/users/asanni/EEG/Overall/';
+        save_path_PSD = '/mnt/scratch2/users/asanni/EEG/Overall/PSD/';
 end
 
 for idx = 1:numel(mat_files)
