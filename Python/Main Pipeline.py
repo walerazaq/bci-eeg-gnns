@@ -69,7 +69,6 @@ class GraphDataset(torch.utils.data.Dataset):
     def load_adjacency_matrix(self, filepath):
         mat_contents = read_mat(filepath)
         adjacency_matrix = mat_contents['BCM']
-        adjacency_matrix = np.abs(adjacency_matrix)
         adj_sparse = csr_matrix(adjacency_matrix)
 
         return adj_sparse
