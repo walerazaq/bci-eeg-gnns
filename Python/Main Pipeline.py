@@ -53,6 +53,7 @@ class GraphDataset(torch.utils.data.Dataset):
         for _, _, _, filename in sorted_files:
             adjacency_matrix_file = os.path.join(self.group_dir, filename)
             class_label = (int(filename.split('_')[-1].split('.')[0][-1])) - 1
+            subject = int(filename.split('_')[0].split('-')[1])
             node_features = self.load_node_features(filename)
             adjacency_matrix = self.load_adjacency_matrix(adjacency_matrix_file)
             adj = SparseTensor.from_scipy(adjacency_matrix)
@@ -60,13 +61,15 @@ class GraphDataset(torch.utils.data.Dataset):
             x = np.vstack(list(node_features.values())).T
             x = torch.tensor(x, dtype=torch.float32)
             data.append(Data(x=x,
-                             adj = adj,
-                             y=torch.tensor([class_label], dtype=torch.long)))
+                             adj=adj,
+                             y=torch.tensor([class_label], dtype=torch.long),
+                             sub=subject))
         return data
 
     def load_adjacency_matrix(self, filepath):
         mat_contents = read_mat(filepath)
         adjacency_matrix = mat_contents['BCM']
+        adjacency_matrix = np.abs(adjacency_matrix)
         adj_sparse = csr_matrix(adjacency_matrix)
 
         return adj_sparse
@@ -102,9 +105,9 @@ class GraphDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         return self.data[idx]
-
+        
 # Load and store dataset
-dataset = GraphDataset(r'/mnt/scratch2/users/asanni/EEG/', 'AlphaTrials')
+dataset = GraphDataset(r'/mnt/scratch2/users/asanni/MEG/', 'Training Data')
 
 # Defining Graph Pooling readout function
 def graph_readout(x, method, batch):
@@ -274,23 +277,27 @@ def train(model, dataset, device):
     model = model.to(device)
 
     loss_function = LabelSmoothingCrossEntropy()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, weight_decay=1e-2)
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=500, eta_min=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.00001, weight_decay=1e-5)
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=500, eta_min=1e-6)
 
     best_models = []
     best_metrics = []
     fold = 0
-
-    for i in range(0, len(dataset), len(dataset)//10):
+    
+    subjects = [1,2,3,4,6,7,9,11,12,13,14,15,16,17,18,19,20]
+    sub_count = len(subjects)
+    
+    for i in subjects:
         model._reset_parameters()
         
-        fold += 1
-        print(f"Fold {fold}/10")
-
-        val_start = i
-        val_end = i + len(dataset)//10
-        train_dataset = dataset[:val_start] + dataset[val_end:]
-        val_dataset = dataset[val_start:val_end]
+        val_dataset = []
+        train_dataset = []
+        
+        for j in range(len(dataset)):
+            if dataset[j].sub == i:
+                val_dataset.append(dataset[j])
+            else:
+                train_dataset.append(dataset[j])
 
         train_loader = DataLoader(
             train_dataset,
@@ -307,12 +314,15 @@ def train(model, dataset, device):
         best_metric_epoch = -1
         best_val_loss = 1000
         best_model = None
-        epochs = 1000
+        epochs = 300
 
         print('-' * 30)
         print('Training ... ')
         early_stop = 30
         es_counter = 0
+        
+        fold += 1
+        print(f"Fold {fold}/{sub_count}")
 
         for epoch in range(epochs):
 
