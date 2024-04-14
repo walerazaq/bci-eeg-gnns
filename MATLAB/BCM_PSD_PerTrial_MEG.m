@@ -35,7 +35,8 @@ for idx = 1:numel(mat_files)
             cfg.method  = 'coh';
             cfg.complex = 'imag';
             bcm_         = ft_connectivityanalysis(cfg, freq);
-            BCM = mean(bcm_.cohspctrm,3); 
+            BCM = mean(bcm_.cohspctrm,3);
+            BCM = abs(BCM);
         
             %% Save Brain Connectivity matrix
             save([save_path_BCM,file,num2str(j),'_',num2str(class),'.mat'],'BCM','-v7.3','-nocompression')
