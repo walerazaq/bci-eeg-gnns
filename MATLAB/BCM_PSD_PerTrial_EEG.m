@@ -1,6 +1,6 @@
 clear; close all;
 
-data_path = 'C:\Users\USER\Desktop\EEGData\dataNEW\';
+data_path = '/mnt/scratch2/users/asanni/dataNEW/';
 
 mat_files = dir([data_path,'*.mat']);
 numel(mat_files)
