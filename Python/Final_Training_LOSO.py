@@ -8,8 +8,6 @@ import os
 import torch
 import numpy as np
 import pandas as pd
-import tempfile
-import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,11 +29,6 @@ from torch_geometric.nn.inits import glorot, zeros
 from collections import OrderedDict
 from torch_geometric.utils import to_networkx
 from torch_geometric.loader import DataLoader
-from sklearn.model_selection import KFold
-import ray
-from ray import train, tune
-from ray.train import Checkpoint
-from ray.tune.schedulers import ASHAScheduler
 
 
 # In[4]:
