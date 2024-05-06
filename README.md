@@ -14,6 +14,8 @@ In each trial, participants undergo a structured sequence of events. At the star
 
 ![Trial workflow](https://github.com/walerazaq/bci-eeg-gnns/assets/165695047/828c47c7-fb5f-4529-98c3-b2a0fb61ab6c)
 
+Image credit: Nieto, Nicolás, et al. “Thinking out Loud, an Open-Access EEG-Based BCI Dataset for Inner Speech Recognition.” Scientific Data, vol. 9, no. 1, 14 Feb. 2022, https://doi.org/10.1038/s41597-022-01147-2. 
+
 The dataset is publicly available with an "open-access", and is downloadable from OpenNeuro: https://openneuro.org/datasets/ds003626/versions/2.1.0
 
 # Methodology
