@@ -58,12 +58,15 @@ test_size = total_size - train_size - val_size
 train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
 
 # Define testset data loader
-
 test_loader = DataLoader(
     test_dataset,
     batch_size=4,
     shuffle=True
 )
+
+'''
+The relevant model needs to be copied into the tuning pipeline
+'''
 
 # Training Models
 #GCN_ = GCN(8, config["f1"], 4, readout='meanmax')
@@ -73,7 +76,6 @@ test_loader = DataLoader(
 #ChebEdge_ = ChebEdge(8, config["f1"], 4, config["chebFilterSize"], readout='meanmax')
 
 # Testing Models
-
 #GCN_ = GCN(8, best_result.config["f1"], 4, readout='meanmax')
 #GIN_ = GIN(8, best_result.config["f1"], 4, readout='meanmax')
 #GAT_ = GAT(8, best_result.config["f1"], 4, best_result.config["num_heads"], readout='meanmax', concat=True)
